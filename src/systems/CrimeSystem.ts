@@ -25,7 +25,7 @@ export class CrimeSystem extends System {
   private crimeMap: Map<string, CrimeData> = new Map();
   private policeStations: Entity[] = [];
   private lastCrimeUpdate: number = 0;
-  private crimeUpdateInterval: number = 5000;
+  private crimeUpdateInterval: number = 5000; // Update every 5 seconds
 
   constructor(spatialGrid: SpatialGridImpl) {
     super();
@@ -55,14 +55,15 @@ export class CrimeSystem extends System {
   private updateCrimeScores(entities: Entity[]): void {
     this.crimeMap.clear();
 
-    const gridSize = 5;
+    // Calculate crime for each grid cell
+    const gridSize = 5; // Process in 5x5 chunks for performance
     
     for (let x = 0; x < 100; x += gridSize) {
       for (let y = 0; y < 100; y += gridSize) {
         const position = { x, y, width: gridSize, height: gridSize };
         const crimeScore = this.calculateCrimeScore(position, entities);
         
-        if (crimeScore > 0.1) {
+        if (crimeScore > 0.1) { // Only store significant crime areas
           const key = `${x},${y}`;
           this.crimeMap.set(key, {
             position,
@@ -77,8 +78,9 @@ export class CrimeSystem extends System {
 
   private calculateCrimeScore(area: GridPosition, entities: Entity[]): number {
     const nearbyBuildings = this.spatialGrid.getEntitiesInArea(area);
-    let baseCrimeScore = 0.1;
+    let baseCrimeScore = 0.1; // Base crime level
     
+    // Calculate crime factors from buildings
     for (const building of nearbyBuildings) {
       const buildingInfo = building.getComponent<BuildingInfoComponent>('BuildingInfo');
       if (buildingInfo) {
@@ -86,24 +88,30 @@ export class CrimeSystem extends System {
       }
     }
 
+    // Apply police presence reduction
     const policePresence = this.calculatePolicePresence(area);
-    const crimeReduction = Math.min(0.8, policePresence * 0.6);
+    const crimeReduction = Math.min(0.8, policePresence * 0.6); // Max 80% reduction
     
+    // Apply density factor (higher density = more crime)
     const densityFactor = Math.min(2.0, 1.0 + (nearbyBuildings.length * 0.1));
     
     const finalScore = Math.max(0, baseCrimeScore * densityFactor * (1 - crimeReduction));
-    return Math.min(1.0, finalScore);
+    return Math.min(1.0, finalScore); // Cap at 1.0
   }
 
   private getBuildingCrimeFactor(buildingInfo: BuildingInfoComponent): number {
     switch (buildingInfo.buildingType) {
       case 'residential':
+        // Higher density residential has more crime
         return 0.05 + (buildingInfo.level * 0.02);
       case 'commercial':
+        // Commercial areas attract petty crime
         return 0.08 + (buildingInfo.level * 0.03);
       case 'industrial':
+        // Industrial areas have moderate crime
         return 0.06 + (buildingInfo.level * 0.02);
       case 'municipal':
+        // Municipal buildings reduce crime
         return buildingInfo.name.toLowerCase().includes('police') ? -0.15 : -0.05;
       default:
         return 0.02;
@@ -131,6 +139,7 @@ export class CrimeSystem extends System {
     const types: CrimeType[] = [];
     const nearbyBuildings = this.spatialGrid.getEntitiesInArea(area);
     
+    // Determine crime types based on area characteristics
     const hasCommercial = nearbyBuildings.some(b => {
       const info = b.getComponent<BuildingInfoComponent>('BuildingInfo');
       return info?.buildingType === 'commercial';
@@ -205,21 +214,11 @@ export class CrimeSystem extends System {
     return [...this.policeStations];
   }
 
-  // INTENTIONAL ISSUE: Poor function name, magic numbers, and no documentation
-  chkPS(a: GridPosition): boolean {
-    const cs = this.getCrimeScore(a);
-    const pp = this.calculatePolicePresence(a);
+  // Method to check if an area needs more police coverage
+  needsPoliceStation(area: GridPosition): boolean {
+    const crimeScore = this.getCrimeScore(area);
+    const policePresence = this.calculatePolicePresence(area);
     
-    return cs > 0.5 && pp < 0.3;
-  }
-  
-  // INTENTIONAL ISSUE: Single letter variables, unclear logic
-  public x(e: Entity[]): number {
-    let t = 0;
-    for(let i=0;i<e.length;i++){
-      const b=e[i].getComponent<BuildingInfoComponent>('BuildingInfo');
-      if(b&&b.name.toLowerCase().includes('police')){t++;}
-    }
-    return t;
+    return crimeScore > 0.5 && policePresence < 0.3;
   }
 }
