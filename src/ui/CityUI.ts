@@ -19,11 +19,9 @@ export class CityUI {
   private lastMousePos: { x: number; y: number } = { x: 0, y: 0 };
 
   constructor(containerId: string) {
+    // INTENTIONAL ISSUE: No null check after getElementById
     this.container = document.getElementById(containerId)!;
-    if (!this.container) {
-      throw new Error(`Container with id '${containerId}' not found`);
-    }
-
+    
     this.setupUI();
     this.setupEventListeners();
   }
@@ -34,7 +32,6 @@ export class CityUI {
         <div class="toolbar" id="toolbar">
           <h2>City Simulator</h2>
           <div class="tool-buttons" id="tool-buttons">
-            <!-- Tools will be added dynamically -->
           </div>
         </div>
         <div class="main-area">
@@ -56,7 +53,6 @@ export class CityUI {
       </div>
     `;
 
-    // Add CSS styles
     const style = document.createElement('style');
     style.textContent = `
       .city-simulator {
@@ -139,15 +135,13 @@ export class CityUI {
     `;
     document.head.appendChild(style);
 
-    // Get references to UI elements
+    // INTENTIONAL ISSUE: No null checks for these elements
     this.toolbar = document.getElementById('toolbar')!;
     this.infoPanel = document.getElementById('info-panel')!;
     this.canvas = document.getElementById('city-canvas') as HTMLCanvasElement;
     
-    // Initialize render engine
     this.renderEngine = new RenderEngine(this.canvas);
     
-    // Setup default tools
     this.addTool('select', 'Select', '🔍', 'Select and inspect entities');
     this.addTool('building', 'Building', '🏢', 'Place buildings');
     this.addTool('road', 'Road', '🛣️', 'Build roads');
@@ -157,19 +151,16 @@ export class CityUI {
   }
 
   private setupEventListeners(): void {
-    // Canvas mouse events
     this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
     this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
     this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
     this.canvas.addEventListener('wheel', this.onWheel.bind(this));
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Window resize
     window.addEventListener('resize', () => {
       this.renderEngine.resize();
     });
 
-    // Keyboard shortcuts
     window.addEventListener('keydown', (event) => {
       switch (event.key.toLowerCase()) {
         case 'z':
@@ -189,7 +180,7 @@ export class CityUI {
     this.isDragging = true;
     this.lastMousePos = { x: event.clientX, y: event.clientY };
     
-    if (event.button === 0) { // Left click
+    if (event.button === 0) {
       this.handleLeftClick(event);
     }
   }
@@ -226,7 +217,6 @@ export class CityUI {
     
     console.log(`Canvas clicked at screen (${x}, ${y}), grid (${gridPos.x}, ${gridPos.y}) with tool: ${this.activeTool}`);
     
-    // Emit custom event for tool usage
     const toolEvent = new CustomEvent('toolUsed', {
       detail: {
         tool: this.activeTool,
@@ -247,7 +237,7 @@ export class CityUI {
     
     this.tools.set(id, tool);
     
-    // Add button to toolbar
+    // INTENTIONAL ISSUE: No null check for toolButtons
     const toolButtons = document.getElementById('tool-buttons')!;
     const button = document.createElement('button');
     button.className = 'tool-button';
@@ -262,27 +252,23 @@ export class CityUI {
   setActiveTool(toolId: string): void {
     console.log(`Setting active tool to: ${toolId}`);
     
-    // Deactivate previous tool
     if (this.activeTool) {
       const prevTool = this.tools.get(this.activeTool);
       if (prevTool) {
         prevTool.isActive = false;
+        // INTENTIONAL ISSUE: No null check before classList operation
         const prevButton = document.getElementById(`tool-${this.activeTool}`);
-        if (prevButton) {
-          prevButton.classList.remove('active');
-        }
+        prevButton!.classList.remove('active');
       }
     }
     
-    // Activate new tool
     this.activeTool = toolId;
     const tool = this.tools.get(toolId);
     if (tool) {
       tool.isActive = true;
+      // INTENTIONAL ISSUE: No null check before classList operation
       const button = document.getElementById(`tool-${toolId}`);
-      if (button) {
-        button.classList.add('active');
-      }
+      button!.classList.add('active');
     }
     
     console.log(`Active tool is now: ${this.activeTool}`);
@@ -292,6 +278,7 @@ export class CityUI {
     return this.activeTool;
   }
 
+  // INTENTIONAL ISSUE: No error handling if elements don't exist
   updateCityStats(stats: { 
     population: number; 
     budget: number; 
@@ -302,23 +289,26 @@ export class CityUI {
     power?: number;
     unemployment?: number;
   }): void {
-    const populationEl = document.getElementById('population');
-    const budgetEl = document.getElementById('budget');
-    const entityCountEl = document.getElementById('entity-count');
-    const trafficEl = document.getElementById('traffic');
-    const congestionEl = document.getElementById('congestion');
-    const crimeEl = document.getElementById('crime');
-    const powerEl = document.getElementById('power');
-    const unemploymentEl = document.getElementById('unemployment');
+    // INTENTIONAL ISSUE: Direct access without null checks
+    document.getElementById('population')!.textContent = stats.population.toString();
+    document.getElementById('budget')!.textContent = stats.budget.toLocaleString();
+    document.getElementById('entity-count')!.textContent = stats.entityCount.toString();
     
-    if (populationEl) populationEl.textContent = stats.population.toString();
-    if (budgetEl) budgetEl.textContent = stats.budget.toLocaleString();
-    if (entityCountEl) entityCountEl.textContent = stats.entityCount.toString();
-    if (trafficEl && stats.traffic !== undefined) trafficEl.textContent = stats.traffic.toString();
-    if (congestionEl && stats.congestion) congestionEl.textContent = stats.congestion;
-    if (crimeEl && stats.crime) crimeEl.textContent = stats.crime;
-    if (powerEl && stats.power !== undefined) powerEl.textContent = stats.power.toString();
-    if (unemploymentEl && stats.unemployment !== undefined) unemploymentEl.textContent = stats.unemployment.toString();
+    if (stats.traffic !== undefined) {
+      document.getElementById('traffic')!.textContent = stats.traffic.toString();
+    }
+    if (stats.congestion) {
+      document.getElementById('congestion')!.textContent = stats.congestion;
+    }
+    if (stats.crime) {
+      document.getElementById('crime')!.textContent = stats.crime;
+    }
+    if (stats.power !== undefined) {
+      document.getElementById('power')!.textContent = stats.power.toString();
+    }
+    if (stats.unemployment !== undefined) {
+      document.getElementById('unemployment')!.textContent = stats.unemployment.toString();
+    }
   }
 
   getRenderEngine(): RenderEngine {
