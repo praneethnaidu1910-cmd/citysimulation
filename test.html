@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>City Simulator Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .test-button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover {
+            background: #2980b9;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>City Simulator Test Page</h1>
+    <p>This is a test to see if basic JavaScript is working.</p>
+    
+    <button class="test-button" onclick="testFunction()">Test Button</button>
+    <button class="test-button" onclick="loadCitySimulator()">Load City Simulator</button>
+    
+    <div id="output">
+        <p>Click the test button to see if JavaScript is working.</p>
+    </div>
+
+    <script>
+        console.log('Test page loaded successfully');
+        
+        function testFunction() {
+            console.log('Test button clicked!');
+            document.getElementById('output').innerHTML = '<p style="color: green;">✓ JavaScript is working! Button click detected.</p>';
+        }
+        
+        function loadCitySimulator() {
+            console.log('Loading city simulator...');
+            document.getElementById('output').innerHTML = '<p>Loading city simulator...</p>';
+            
+            // Try to load the city simulator module
+            import('./dist/index.js')
+                .then(() => {
+                    document.getElementById('output').innerHTML = '<p style="color: green;">✓ City Simulator module loaded successfully!</p>';
+                })
+                .catch(error => {
+                    console.error('Failed to load city simulator:', error);
+                    document.getElementById('output').innerHTML = `<p style="color: red;">✗ Failed to load city simulator: ${error.message}</p>`;
+                });
+        }
+        
+        // Test if the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded for test page');
+            document.getElementById('output').innerHTML += '<p>DOM loaded successfully.</p>';
+        });
+    </script>
+</body>
+</html>

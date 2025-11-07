@@ -1,0 +1,268 @@
+import { EntityManager } from './core/EntityManager.js';
+import { SpatialGridImpl } from './core/SpatialGrid.js';
+import { CityUI } from './ui/CityUI.js';
+import { GridPositionImpl } from './core/GridPosition.js';
+import { PowerConsumerComponent, TrafficGeneratorComponent, TaxGeneratorComponent } from './core/Component.js';
+import { BuildingFactory } from './buildings/BuildingFactory.js';
+import { ZoneManagerImpl } from './zoning/ZoneManager.js';
+import { LandValueSystem } from './systems/LandValueSystem.js';
+import { TrafficSystem } from './systems/TrafficSystem.js';
+import { PowerSystem } from './systems/PowerSystem.js';
+import { PublicTransitSystem } from './systems/PublicTransitSystem.js';
+import { CrimeSystem } from './systems/CrimeSystem.js';
+import { EconomicSystem } from './systems/EconomicSystem.js';
+import { RoadNetwork } from './transportation/RoadNetwork.js';
+import { ZoneType, BuildingInfoComponent } from './buildings/BuildingTypes.js';
+
+class CitySimulator {
+  private entityManager: EntityManager;
+  private spatialGrid: SpatialGridImpl;
+  private ui: CityUI;
+  private buildingFactory: BuildingFactory;
+  private zoneManager: ZoneManagerImpl;
+  private landValueSystem: LandValueSystem;
+  private roadNetwork: RoadNetwork;
+  private trafficSystem: TrafficSystem;
+  private powerSystem: PowerSystem;
+  private transitSystem: PublicTransitSystem;
+  private crimeSystem: CrimeSystem;
+  private economicSystem: EconomicSystem;
+  private isRunning: boolean = false;
+  private lastUpdateTime: number = 0;
+  private selectedBuildingType: string = 'house';
+  private currentTool: string = 'select';
+
+  constructor() {
+    this.entityManager = new EntityManager();
+    this.spatialGrid = new SpatialGridImpl(10);
+    this.zoneManager = new ZoneManagerImpl(100, 100);
+    this.buildingFactory = new BuildingFactory(this.entityManager);
+    this.roadNetwork = new RoadNetwork();
+    this.landValueSystem = new LandValueSystem(this.zoneManager, this.spatialGrid);
+    this.trafficSystem = new TrafficSystem(this.roadNetwork, this.spatialGrid);
+    this.powerSystem = new PowerSystem(this.spatialGrid);
+    this.transitSystem = new PublicTransitSystem(this.spatialGrid);
+    this.crimeSystem = new CrimeSystem(this.spatialGrid);
+    this.economicSystem = new EconomicSystem(100000);
+    this.ui = new CityUI('app');
+    
+    // Add systems to entity manager
+    this.entityManager.addSystem(this.landValueSystem);
+    this.entityManager.addSystem(this.trafficSystem);
+    this.entityManager.addSystem(this.powerSystem);
+    this.entityManager.addSystem(this.transitSystem);
+    this.entityManager.addSystem(this.crimeSystem);
+    this.entityManager.addSystem(this.economicSystem);
+    
+    // Connect managers to render engine
+    this.ui.getRenderEngine().setZoneManager(this.zoneManager);
+    this.ui.getRenderEngine().setTrafficSystem(this.trafficSystem);
+    
+    this.setupEventListeners();
+    this.setupBuildingTools();
+    this.start();
+  }
+
+  private setupEventListeners(): void {
+    // Listen for tool usage events from the UI
+    this.ui.getCanvas().addEventListener('toolUsed', (event: Event) => {
+      const customEvent = event as CustomEvent;
+      this.handleToolUsage(customEvent.detail);
+    });
+  }
+
+  private setupBuildingTools(): void {
+    // Add building type selection tools
+    this.ui.addTool('zone-residential', 'Zone R', '🏠', 'Zone area for residential buildings');
+    this.ui.addTool('zone-commercial', 'Zone C', '🏢', 'Zone area for commercial buildings');
+    this.ui.addTool('zone-industrial', 'Zone I', '🏭', 'Zone area for industrial buildings');
+    this.ui.addTool('zone-municipal', 'Zone M', '🏛️', 'Zone area for municipal buildings');
+    
+    this.ui.addTool('build-house', 'House', '🏠', 'Build residential house');
+    this.ui.addTool('build-apartment', 'Apartment', '🏢', 'Build apartment building');
+    this.ui.addTool('build-shop', 'Shop', '🏪', 'Build commercial shop');
+    this.ui.addTool('build-factory', 'Factory', '🏭', 'Build industrial factory');
+    this.ui.addTool('build-police', 'Police', '👮', 'Build police station');
+    
+    this.ui.addTool('road', 'Road', '🛣️', 'Build roads for traffic');
+  }
+
+  private handleToolUsage(detail: any): void {
+    const { tool, gridPosition } = detail;
+    this.currentTool = tool;
+    
+    console.log(`Handling tool usage: ${tool} at (${gridPosition.x}, ${gridPosition.y})`);
+    
+    // Handle zoning tools
+    if (tool.startsWith('zone-')) {
+      const zoneType = tool.replace('zone-', '') as ZoneType;
+      this.setZoneAt(gridPosition.x, gridPosition.y, zoneType);
+      return;
+    }
+    
+    // Handle building tools
+    if (tool.startsWith('build-')) {
+      const buildingType = tool.replace('build-', '');
+      this.placeBuildingAt(gridPosition.x, gridPosition.y, buildingType);
+      return;
+    }
+    
+    // Handle legacy tools
+    switch (tool) {
+      case 'building':
+        this.placeBuildingAt(gridPosition.x, gridPosition.y, 'house');
+        break;
+      case 'road':
+        this.placeRoadAt(gridPosition.x, gridPosition.y);
+        break;
+      case 'power':
+        this.placeBuildingAt(gridPosition.x, gridPosition.y, 'powerPlant');
+        break;
+      case 'select':
+        this.selectEntityAt(gridPosition.x, gridPosition.y);
+        break;
+      default:
+        console.log(`Unknown tool: ${tool}`);
+    }
+  }
+
+  private setZoneAt(x: number, y: number, zoneType: ZoneType): void {
+    this.zoneManager.setZone(x, y, zoneType);
+    console.log(`Zoned (${x}, ${y}) as ${zoneType}`);
+  }
+
+  private placeBuildingAt(x: number, y: number, buildingType: string): void {
+    const currentZone = this.zoneManager.getZone(x, y);
+    const entity = this.buildingFactory.createBuilding(buildingType, 
+      new GridPositionImpl(x, y), currentZone);
+    
+    if (entity) {
+      this.spatialGrid.addEntity(entity);
+      console.log(`Placed ${buildingType} at (${x}, ${y})`);
+    } else {
+      console.log(`Cannot place ${buildingType} at (${x}, ${y}) - incompatible zone or invalid building type`);
+    }
+  }
+
+  private placeRoadAt(x: number, y: number): void {
+    const position = new GridPositionImpl(x, y, 1, 1);
+    
+    // Add road node to the traffic network
+    this.trafficSystem.addRoad(position);
+    
+    console.log(`Placed road at (${x}, ${y})`);
+  }
+
+
+
+  private selectEntityAt(x: number, y: number): void {
+    const position = new GridPositionImpl(x, y, 1, 1);
+    const entities = this.spatialGrid.getEntitiesInArea(position);
+    const zone = this.zoneManager.getZone(x, y);
+    const landValue = this.zoneManager.getLandValue(x, y);
+    
+    console.log(`Position (${x}, ${y}): Zone=${zone}, Land Value=$${landValue.toLocaleString()}`);
+    
+    if (entities.length > 0) {
+      const entity = entities[0];
+      const buildingInfo = entity.getComponent<BuildingInfoComponent>('BuildingInfo');
+      console.log(`Selected entity: ${entity.id}`, {
+        building: buildingInfo?.name || 'Unknown',
+        type: buildingInfo?.buildingType || 'Unknown',
+        level: buildingInfo?.level || 'N/A',
+        components: Array.from(entity.components.keys())
+      });
+    } else {
+      console.log(`No entity found at (${x}, ${y})`);
+    }
+  }
+
+  private start(): void {
+    this.isRunning = true;
+    this.lastUpdateTime = performance.now();
+    this.gameLoop();
+  }
+
+  private gameLoop(): void {
+    if (!this.isRunning) return;
+
+    const currentTime = performance.now();
+    const deltaTime = (currentTime - this.lastUpdateTime) / 1000; // Convert to seconds
+    this.lastUpdateTime = currentTime;
+
+    this.update(deltaTime);
+    this.render();
+
+    requestAnimationFrame(() => this.gameLoop());
+  }
+
+  private update(deltaTime: number): void {
+    // Update all systems
+    this.entityManager.update(deltaTime);
+    
+    // Update UI stats
+    const entities = this.entityManager.getAllEntities();
+    const powerConsumers = entities.filter(e => e.hasComponent('PowerConsumer'));
+    const taxGenerators = entities.filter(e => e.hasComponent('TaxGenerator'));
+    
+    const totalTaxRevenue = taxGenerators.reduce((sum, entity) => {
+      const taxGen = entity.getComponent<TaxGeneratorComponent>('TaxGenerator');
+      return sum + (taxGen?.annualRevenue || 0);
+    }, 0);
+
+    const trafficStats = this.trafficSystem.getTrafficStatistics();
+    const economicStats = this.economicSystem.getEconomicStatistics(entities);
+    const crimeStats = this.crimeSystem.getCrimeStatistics();
+    const powerStats = this.powerSystem.getPowerGridStatus();
+    
+    this.ui.updateCityStats({
+      population: economicStats.totalPopulation,
+      budget: economicStats.municipalBudget,
+      entityCount: entities.length,
+      traffic: trafficStats.activeTrips,
+      congestion: trafficStats.congestionLevel,
+      crime: crimeStats.safetyLevel,
+      power: Math.round(this.powerSystem.getPowerCoverage(entities) * 100),
+      unemployment: Math.round(economicStats.unemployment * 100)
+    });
+  }
+
+  private render(): void {
+    const entities = this.entityManager.getAllEntities();
+    this.ui.getRenderEngine().render(entities);
+  }
+
+  stop(): void {
+    this.isRunning = false;
+  }
+
+  // Debug methods
+  getActiveTool(): string | null {
+    return this.ui.getActiveTool();
+  }
+
+  getEntityCount(): number {
+    return this.entityManager.getEntityCount();
+  }
+}
+
+// Initialize the application when the DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing City Simulator...');
+  try {
+    const simulator = new CitySimulator();
+    console.log('City Simulator initialized successfully!');
+    
+    // Add debug info to window for browser console access
+    (window as any).citySimulator = simulator;
+    (window as any).debugInfo = () => {
+      console.log('Active tool:', simulator.getActiveTool());
+      console.log('Entity count:', simulator.getEntityCount());
+      console.log('City simulator loaded successfully');
+    };
+    
+    console.log('Debug: Type debugInfo() in browser console for more info');
+  } catch (error) {
+    console.error('Failed to initialize City Simulator:', error);
+  }
+});
